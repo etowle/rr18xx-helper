@@ -1,0 +1,156 @@
+// ==UserScript==
+// @name         rr18xx enhancements
+// @namespace    http://tampermonkey.net/
+// @version      0.5
+// @description  Calculate company market/book values and player liquidity for rr18xx finance tables
+// @author       Eli Towle
+// @match        http://www.rr18xx.com/cgi-bin/game_18xx.cgi?gname=*
+// @match        http://www.rr18xx.com/cgi-bin/cmd_snap_fin.cgi?gname=*
+// @grant        none
+// @run-at       document-end
+// @require      http://code.jquery.com/jquery-3.4.1.min.js
+// ==/UserScript==
+
+// Only run for games of 1817
+if ($('strong').filter(function() { return $(this).text() === '1817'; }).length > 0) {
+
+    // Function call repeats at set intervals
+    // Useful if "R" refresh button is pressed in rr18xx interface
+    // In this case, HTML is rewritten with server response and the extra columns must be re-added
+    (function refreshTable() {
+        'use strict';
+
+        // If fth_bv header does not exist, add columns
+        if ($('th[id^=fth_bv]').length === 0) {
+            // Define colors
+            var green = '#65C454';
+            var orange = '#FFDA66';
+            var red = '#FF684C';
+            var lightgreen = '#CDEBC7';
+            var lightred = '#FFC0B5';
+
+            // Add market/book value headers
+            // Debt Margin has no ID, but comes after Order column
+            var $dmHeader = $('#fth_ord').eq(0).next();
+            $('<th id="fth_bv" rowspan="2" bgcolor="#D8D8D8"></th>').html('Book<br/>val').insertAfter($dmHeader);
+            $('<th id="fth_mv" rowspan="2" bgcolor="#D8D8D8"></th>').html('Mrkt<br/>val').insertAfter($dmHeader);
+
+            // Track player liquidity
+            var players = jQuery.makeArray($('th[id^=fth_s_]').map(function() { return $(this).text(); }));
+            var num_players = players.length;
+            var liquidity = new Array(num_players).fill(0);
+
+            // Add market/book value cells
+            $('tr[id^=ftr_]').each( function() {
+                // Extract certain <td> elements for convenience
+                var loan_td = $(this).find('td[id^=ft_loans_]');
+                var cash_td = $(this).find('td[id^=ft_treas_]');
+                var mkt_shares_td = $(this).find('td[id^=ft_shrmkt_]');
+
+                // Extract relevant values
+                var cash = parseInt(cash_td.text().substr(1));
+                var stock_val = parseInt(loan_td.prev().text().substr(1));
+                var loans = parseInt(loan_td.text());
+                var shares = parseInt(loan_td.next().text());
+                var ipo_shares = parseInt($(this).find('td[id^=ft_shripo_]').text());
+                var trains = $(this).find('td[id^=ft_trns_]').text();
+                var tokens = parseInt($(this).find('td[id^=ft_tkn_]').text().substr(-1));
+
+                // Calculate train value
+                var costs = [0, 0, 100, 250, 400, 600, 750, 900, 1100];
+                var trainValue = 0;
+                for (var i = 2; i < costs.length; i++) {
+                    var re = new RegExp(i, 'g');
+                    trainValue += costs[i] * (trains.match(re) || []).length;
+                }
+
+                // Calculate values
+                var market_val = shares * stock_val
+                var book_val = cash + trainValue + ipo_shares * stock_val - 100*loans + 50*tokens;
+                var sign = book_val < 0 ? '-' : '';
+
+                // Determine color based on book_val - market_val
+                // Default based on color of President column (white or gray)
+                var bgcolor = cash_td.prev().attr('bgcolor');
+                var diff_val = book_val - market_val;
+                if (diff_val >= 50 && diff_val < 200) {
+                    bgcolor = lightgreen;
+                }
+                else if (diff_val >= 200) {
+                    bgcolor = green;
+                }
+                else if (diff_val <= -50 && diff_val > -200) {
+                    bgcolor = lightred;
+                }
+                else if (diff_val <= -200) {
+                    bgcolor = red;
+                }
+
+                // Create <td> tag text
+                // Background color inherited from President column (before Cash)
+                var td1 = '<td bgcolor="' + bgcolor + '" align="right">';
+                var td2 = '</td>';
+
+                // Construct market/book value cells
+                var market_td = td1 + '$' + market_val + td2;
+                var book_td = td1 + sign + '$' + Math.abs(book_val) + td2;
+
+                // Add cells to HTML after Debt Margin column
+                $(this).find('td[id^=ft_dmrg_]').after(market_td + book_td);
+
+                // Color payout cells
+                var payout = $(this).find('td[id^=ft_co_]').next();
+                // Repeat until <td> has id attribute (Private column)
+                while (!payout.attr('id')) {
+                    var paid = payout.text();
+                    if (paid.includes('[')) {
+                        payout.attr('bgcolor', red);
+                    }
+                    else if (paid.includes('|')) {
+                        payout.attr('bgcolor', orange);
+                    }
+                    else if (!paid.includes('-')) {
+                        payout.attr('bgcolor', green);
+                    }
+                    payout = payout.next();
+                }
+
+                // Add to liquidity
+                var pres = cash_td.prev().text();
+                var pcell = mkt_shares_td.next();
+                for (i = 0; i < num_players; i++) {
+                    // Don't count president shares
+                    liquidity[i] += stock_val * Math.max(parseInt(pcell.text()) - (pres == players[i] ? 2 : 0), 0);
+                    pcell = pcell.next();
+                }
+            });
+
+            // Extend white cells at bottom right
+            var to_extend = $('td[valign*="top"]');
+            to_extend.attr("colspan", parseInt(to_extend.attr("colspan")) + 2);
+
+            // Add liquidity row
+            var pcash_tr = $('tr:contains("Player Cash")');
+            var liquidity_row = pcash_tr.clone();
+            pcash_tr.after(liquidity_row);
+            liquidity_row.find('th').text('Liquidity');
+
+            // Create array of player cash values
+            var pcash = jQuery.makeArray($('td[id^=ft_pcash_]').map(function() {
+                return parseInt($(this).text().substr(1));
+            }));
+
+            // Add liquidity values and rename id attributes in new liquidity row
+            liquidity_row.find('td[id^=ft_pcash_]').each( function(index) {
+                $(this).attr('id', $(this).attr('id').replace('pcash', 'pliq'));
+                $(this).text('$' + (liquidity[index] + pcash[index]));
+            });
+
+            // Extend rowspan of whitespace before and after bottom summary rows
+            $('[rowspan="5"]').each( function() { $(this).attr('rowspan', '6'); } );
+        }
+
+        // Repeat call in five seconds
+        setTimeout(refreshTable, 5000);
+    })();
+}
