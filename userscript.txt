@@ -154,3 +154,4 @@ if ($('strong').filter(function() { return $(this).text() === '1817'; }).length 
         setTimeout(refreshTable, 5000);
     })();
 }
+
