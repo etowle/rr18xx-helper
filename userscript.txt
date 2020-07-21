@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         rr18xx enhancements
 // @namespace    http://tampermonkey.net/
-// @version      0.5
+// @version      0.6
 // @description  Calculate company market/book values and player liquidity for rr18xx finance tables
 // @author       Eli Towle
 // @match        http://www.rr18xx.com/cgi-bin/game_18xx.cgi?gname=*
@@ -119,8 +119,10 @@ if ($('strong').filter(function() { return $(this).text() === '1817'; }).length 
                 var pres = cash_td.prev().text();
                 var pcell = mkt_shares_td.next();
                 for (i = 0; i < num_players; i++) {
+                    // Sold shares begin with an asterisk
+                    let pshares = pcell.text().replace(/\*/g, '');
                     // Don't count president shares
-                    liquidity[i] += stock_val * Math.max(parseInt(pcell.text()) - (pres == players[i] ? 2 : 0), 0);
+                    liquidity[i] += stock_val * Math.max(parseInt(pshares) - (pres == players[i] ? 2 : 0), 0);
                     pcell = pcell.next();
                 }
             });
@@ -154,4 +156,3 @@ if ($('strong').filter(function() { return $(this).text() === '1817'; }).length 
         setTimeout(refreshTable, 5000);
     })();
 }
-
