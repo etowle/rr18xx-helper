@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         rr18xx enhancements
 // @namespace    http://tampermonkey.net/
-// @version      0.6
+// @version      0.7
 // @description  Calculate company market/book values and player liquidity for rr18xx finance tables
 // @author       Eli Towle
 // @match        http://www.rr18xx.com/cgi-bin/game_18xx.cgi?gname=*
@@ -12,7 +12,9 @@
 // ==/UserScript==
 
 // Only run for games of 1817
-if ($('strong').filter(function() { return $(this).text() === '1817'; }).length > 0) {
+// These include open shares table header
+// Note extra whitespace in id
+if ($('th[id="fth_osh "]').length > 0) {
 
     // Function call repeats at set intervals
     // Useful if "R" refresh button is pressed in rr18xx interface
