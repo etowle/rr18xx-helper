@@ -11,17 +11,16 @@
 // @require      http://code.jquery.com/jquery-3.4.1.min.js
 // ==/UserScript==
 
+'use strict';
+
 // Only run for games of 1817
 // These include open shares table header
 // Note extra whitespace in id
 if ($('th[id="fth_osh "]').length > 0) {
-
     // Function call repeats at set intervals
     // Useful if "R" refresh button is pressed in rr18xx interface
     // In this case, HTML is rewritten with server response and the extra columns must be re-added
     (function refreshTable() {
-        'use strict';
-
         // If fth_bv header does not exist, add columns
         if ($('th[id^=fth_bv]').length === 0) {
             // Define colors
